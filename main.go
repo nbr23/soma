@@ -87,7 +87,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 
 		case "ctrl+c", "q":
-			fmt.Println("Killing mpv")
 			m.mpvConfig.signals <- os.Kill
 			return m, tea.Quit
 

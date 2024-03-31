@@ -60,11 +60,10 @@ func getSomaChannels() (*channels, error) {
 }
 
 type model struct {
-	choices          []channel
-	cursor           int
-	playing          int
-	mpvConfig        *mpvConfig
-	mpvProcessSignal chan os.Signal
+	choices   []channel
+	cursor    int
+	playing   int
+	mpvConfig *mpvConfig
 }
 
 /* TUI */
@@ -148,7 +147,7 @@ func runMpv(c *mpvConfig) error {
 	cmd := exec.Command("mpv", "--idle", fmt.Sprintf("--input-ipc-server=%s", c.socketPath))
 
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("error starting mpv: %s\n", err)
+		return fmt.Errorf("error starting mpv: %s", err)
 	}
 
 	c.signals = make(chan os.Signal, 1)
@@ -180,10 +179,6 @@ func startMpvClient(c *mpvConfig) error {
 				}
 				time.Sleep(1 * time.Second)
 			}
-			if err != nil {
-				return fmt.Errorf("error connecting to mpv: %s\n", err)
-			}
-			ipcc, err = mpv.NewIPCClient(c.socketPath)
 			if err != nil {
 				return fmt.Errorf("error connecting to mpv: %s\n", err)
 			}

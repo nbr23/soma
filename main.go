@@ -122,6 +122,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.config.saveConfig()
 			if m.mpvConfig.signals != nil {
 				m.mpvConfig.signals <- os.Kill
+			} else {
+				m.mpvConfig.mpv.SetPause(true)
 			}
 			m.quitting = true
 			return m, tea.Quit

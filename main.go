@@ -203,7 +203,7 @@ func startMpvClient(c *mpvConfig) error {
 
 func main() {
 	flags := flag.NewFlagSet("soma", flag.ExitOnError)
-	socketPath := flags.String("socket", "/tmp/mpvsocket", "Path to mpv socket")
+	socketPath := flags.String("socket", "/tmp/mpvsocket.sock", "Path to mpv socket")
 	startMpv := flags.Bool("start-mpv", true, "Start mpv if not running")
 	flags.Parse(os.Args[1:])
 

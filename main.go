@@ -64,6 +64,7 @@ type model struct {
 	cursor    int
 	playing   int
 	mpvConfig *mpvConfig
+	quitting  bool
 }
 
 /* TUI */
@@ -73,6 +74,7 @@ func initialModel(c []channel, m *mpvConfig) model {
 		choices:   c,
 		playing:   -1,
 		mpvConfig: m,
+		quitting:  false,
 	}
 }
 
@@ -87,6 +89,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "ctrl+c", "q":
 			m.mpvConfig.signals <- os.Kill
+			m.quitting = true
 			return m, tea.Quit
 
 		case "up", "k":
@@ -116,6 +119,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	if m.quitting {
+		return ""
+	}
 	s := "Pick a SomaFM Channel\n\n"
 
 	for i, choice := range m.choices {

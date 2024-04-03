@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"encoding/xml"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -65,6 +67,7 @@ type model struct {
 	playing   int
 	mpvConfig *mpvConfig
 	quitting  bool
+	config    *somaConfig
 }
 
 /* TUI */
@@ -76,6 +79,34 @@ func initialModel(c []channel, m *mpvConfig) model {
 		mpvConfig: m,
 		quitting:  false,
 	}
+
+	config, _ := loadConfig()
+	model.config = config
+
+	mpvCurrentlyPlayingPath, err := m.mpv.Path()
+	if err != nil {
+		panic(err)
+	}
+	if mpvCurrentlyPlayingPath != "" {
+		for i, c := range c {
+			if c.HighestURL == mpvCurrentlyPlayingPath {
+				model.playing = i
+				break
+			}
+		}
+	} else {
+		if model.config.CurrentlyPlaying != "" {
+			for i, c := range c {
+				if c.HighestURL == model.config.CurrentlyPlaying {
+					model.playing = i
+					model.mpvConfig.mpv.Loadfile(c.HighestURL, mpv.LoadFileModeReplace)
+					break
+				}
+			}
+		}
+	}
+
+	return model
 }
 
 func (m model) Init() tea.Cmd {
@@ -88,6 +119,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 
 		case "ctrl+c", "q":
+			m.config.saveConfig()
 			if m.mpvConfig.signals != nil {
 				m.mpvConfig.signals <- os.Kill
 			}
@@ -108,6 +140,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.playing != m.cursor {
 				m.playing = m.cursor
 				m.mpvConfig.mpv.Loadfile(m.choices[m.cursor].HighestURL, mpv.LoadFileModeReplace)
+				m.config.CurrentlyPlaying = m.choices[m.cursor].HighestURL
 				if paused, _ := m.mpvConfig.mpv.Pause(); paused {
 					m.mpvConfig.mpv.SetPause(false)
 				}
@@ -197,6 +230,67 @@ func startMpvClient(c *mpvConfig) error {
 	c.ipccClient = ipcc
 	c.mpv = mpv.NewClient(c.ipccClient)
 	return nil
+}
+
+/* CONFIG */
+
+type somaConfig struct {
+	CurrentlyPlaying string `json:"currentlyPlaying"`
+}
+
+func (c *somaConfig) saveConfig() error {
+	if c == nil {
+		return nil
+	}
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return err
+	}
+
+	configPath := filepath.Join(configDir, "soma.json")
+
+	file, err := os.OpenFile(configPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	_, err = file.Write(data)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func loadConfig() (*somaConfig, error) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return &somaConfig{}, err
+	}
+
+	configPath := filepath.Join(configDir, "soma.json")
+
+	file, err := os.Open(configPath)
+	if err != nil {
+		return &somaConfig{}, err
+	}
+	defer file.Close()
+
+	var c somaConfig
+
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&c)
+	if err != nil {
+		return &somaConfig{}, err
+	}
+
+	return &c, nil
 }
 
 /* MAIN */

@@ -3,7 +3,6 @@ module github.com/nbr23/soma
 go 1.22.1
 
 require (
-	github.com/blang/mpv v0.0.0-20160810175505-d56d7352e068
 	github.com/charmbracelet/bubbletea v0.25.0
 	github.com/nbr23/go-mpv v0.0.0-20240404024243-a9ba32eda984
 	golang.org/x/net v0.23.0

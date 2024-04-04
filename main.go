@@ -73,6 +73,10 @@ type model struct {
 	currentlTitle string
 }
 
+type currentTitleUpdateMsg struct {
+	title string
+}
+
 func initialModel(c []channel, m *mpvConfig) model {
 	model := model{
 		choices:   c,
@@ -91,6 +95,7 @@ func initialModel(c []channel, m *mpvConfig) model {
 	if mpvCurrentlyPlayingPath != "" {
 		for i, c := range c {
 			if c.HighestURL == mpvCurrentlyPlayingPath {
+				model.cursor = i
 				model.playing = i
 				break
 			}
@@ -99,6 +104,7 @@ func initialModel(c []channel, m *mpvConfig) model {
 		if model.config.CurrentlyPlaying != "" {
 			for i, c := range c {
 				if c.HighestURL == model.config.CurrentlyPlaying {
+					model.cursor = i
 					model.playing = i
 					model.mpvConfig.mpv.Loadfile(c.HighestURL, mpv.LoadFileModeReplace)
 					break
@@ -241,10 +247,6 @@ func (m *mpvConfig) startMpvClient() error {
 	m.ipccClient = ipcc
 	m.mpv = mpv.NewClient(m.ipccClient)
 	return nil
-}
-
-type currentTitleUpdateMsg struct {
-	title string
 }
 
 func (m *model) RegisterMpvEventHandler(p *tea.Program) {

@@ -61,19 +61,20 @@ func getSomaChannels() (*channels, error) {
 	return &c, nil
 }
 
-type model struct {
-	choices   []channel
-	cursor    int
-	playing   int
-	mpvConfig *mpvConfig
-	quitting  bool
-	config    *somaConfig
-}
-
 /* TUI */
 
+type model struct {
+	choices       []channel
+	cursor        int
+	playing       int
+	mpvConfig     *mpvConfig
+	quitting      bool
+	config        *somaConfig
+	currentlTitle string
+}
+
 func initialModel(c []channel, m *mpvConfig) model {
-	return model{
+	model := model{
 		choices:   c,
 		playing:   -1,
 		mpvConfig: m,
@@ -115,6 +116,8 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case currentTitleUpdateMsg:
+		m.currentlTitle = msg.title
 	case tea.KeyMsg:
 		switch msg.String() {
 
@@ -159,7 +162,12 @@ func (m model) View() string {
 	if m.quitting {
 		return ""
 	}
-	s := "Pick a SomaFM Channel\n\n"
+	var s string
+	if m.currentlTitle != "" {
+		s = fmt.Sprintf("Now playing: « %s »\n\n", m.currentlTitle)
+	} else {
+		s = "Pick a SomaFM Channel:\n\n"
+	}
 
 	for i, choice := range m.choices {
 		cursor := " "
@@ -171,6 +179,7 @@ func (m model) View() string {
 		if m.playing == i {
 			checked = "🔊"
 		}
+
 		s += fmt.Sprintf("%s %s %s\n", cursor, checked, choice.Title)
 	}
 	return s
@@ -210,13 +219,13 @@ func runMpv(c *mpvConfig) error {
 	return nil
 }
 
-func startMpvClient(c *mpvConfig) error {
-	ipcc, err := mpv.NewIPCClient(c.socketPath)
+func (m *mpvConfig) startMpvClient() error {
+	ipcc, err := mpv.NewIPCClient(m.socketPath)
 	if err != nil {
-		if c.startMpv {
-			err = runMpv(c)
+		if m.startMpv {
+			err = runMpv(m)
 			for i := 0; i < 15; i++ {
-				ipcc, err = mpv.NewIPCClient(c.socketPath)
+				ipcc, err = mpv.NewIPCClient(m.socketPath)
 				if err == nil {
 					break
 				}
@@ -229,9 +238,22 @@ func startMpvClient(c *mpvConfig) error {
 			return fmt.Errorf("error connecting to mpv: %s\n", err)
 		}
 	}
-	c.ipccClient = ipcc
-	c.mpv = mpv.NewClient(c.ipccClient)
+	m.ipccClient = ipcc
+	m.mpv = mpv.NewClient(m.ipccClient)
 	return nil
+}
+
+type currentTitleUpdateMsg struct {
+	title string
+}
+
+func (m *model) RegisterMpvEventHandler(p *tea.Program) {
+	m.mpvConfig.mpv.ObserveProperty("media-title")
+	m.mpvConfig.mpv.RegisterHandler(func(r *mpv.Response) {
+		if r.Event == "property-change" && r.Name == "media-title" {
+			p.Send(currentTitleUpdateMsg{title: r.Data.(string)})
+		}
+	})
 }
 
 /* CONFIG */
@@ -313,7 +335,8 @@ func main() {
 		socketPath: *socketPath,
 		startMpv:   *startMpv,
 	}
-	err = startMpvClient(&mpvClient)
+
+	err = mpvClient.startMpvClient()
 	if err != nil {
 		fmt.Println("Unable to connect to mpv", err)
 		os.Exit(1)
@@ -321,17 +344,10 @@ func main() {
 
 	model := initialModel(s.Channels, &mpvClient)
 
-	currentPath, err := mpvClient.mpv.Path()
-	if err == nil && currentPath != "<nil>" {
-		for i, c := range s.Channels {
-			if c.HighestURL == currentPath {
-				model.playing = i
-				break
-			}
-		}
-	}
-
 	p := tea.NewProgram(model)
+
+	model.RegisterMpvEventHandler(p)
+
 	if _, err := p.Run(); err != nil {
 		fmt.Print(err)
 		os.Exit(1)

@@ -318,6 +318,9 @@ func (m *model) RegisterMpvEventHandler(p *tea.Program) {
 	m.mpvConfig.mpv.ObserveProperty("media-title")
 	m.mpvConfig.mpv.RegisterHandler(func(r *mpv.Response) {
 		if r.Event == "property-change" && r.Name == "media-title" {
+			if r.Data == nil {
+				return
+			}
 			p.Send(currentTitleUpdateMsg{title: r.Data.(string)})
 		}
 	})

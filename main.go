@@ -24,15 +24,17 @@ import (
 /* XML PARSING */
 
 type channel struct {
-	Title      string   `xml:"title"`
-	HighestURL string   `xml:"highestpls"`
-	FastURL    []string `xml:"fastpls"`
-	SlowURL    string   `xml:"slowpls"`
-	Id         string   `xml:"id,attr"`
+	Title       string   `xml:"title" json:"title"`
+	HighestURL  string   `xml:"highestpls" json:"highestpls"`
+	FastURL     []string `xml:"fastpls" json:"fastpls"`
+	SlowURL     string   `xml:"slowpls" json:"slowpls"`
+	Id          string   `xml:"id,attr" json:"id"`
+	Description string   `xml:"description" json:"description"`
+	Genre       string   `xml:"genre" json:"genre"`
 }
 
 type channels struct {
-	Channels []channel `xml:"channel"`
+	Channels []channel `xml:"channel" json:"channels"`
 }
 
 func getSomaChannels() (*channels, error) {

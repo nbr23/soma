@@ -97,6 +97,7 @@ func initialModel(c []channel, m *mpvConfig) model {
 			if c.HighestURL == mpvCurrentlyPlayingPath {
 				model.cursor = i
 				model.playing = i
+				model.mpvConfig.mpv.SetPause(model.config.IsPaused)
 				break
 			}
 		}
@@ -105,8 +106,10 @@ func initialModel(c []channel, m *mpvConfig) model {
 			for i, c := range c {
 				if c.HighestURL == model.config.CurrentlyPlaying {
 					model.cursor = i
-					model.playing = i
-					model.mpvConfig.mpv.Loadfile(c.HighestURL, mpv.LoadFileModeReplace)
+					if !model.config.IsPaused {
+						model.playing = i
+						model.mpvConfig.mpv.Loadfile(c.HighestURL, mpv.LoadFileModeReplace)
+					}
 					break
 				}
 			}
@@ -152,11 +155,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.playing = m.cursor
 				m.mpvConfig.mpv.Loadfile(m.choices[m.cursor].HighestURL, mpv.LoadFileModeReplace)
 				m.config.CurrentlyPlaying = m.choices[m.cursor].HighestURL
+				m.config.IsPaused = false
 				if paused, _ := m.mpvConfig.mpv.Pause(); paused {
 					m.mpvConfig.mpv.SetPause(false)
 				}
 			} else {
 				m.mpvConfig.mpv.SetPause(true)
+				m.config.IsPaused = true
 				m.playing = -1
 			}
 		}
@@ -262,6 +267,7 @@ func (m *model) RegisterMpvEventHandler(p *tea.Program) {
 
 type somaConfig struct {
 	CurrentlyPlaying string `json:"currentlyPlaying"`
+	IsPaused         bool   `json:"isPaused"`
 }
 
 func (c *somaConfig) saveConfig() error {

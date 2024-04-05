@@ -16,6 +16,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	mpv "github.com/nbr23/go-mpv"
 	"golang.org/x/net/html/charset"
@@ -65,6 +66,27 @@ func getSomaChannels() (*channels, error) {
 
 /* TUI */
 
+var (
+	appStyle        = lipgloss.NewStyle()
+	nowPlayingStyle = lipgloss.NewStyle().
+			Inherit(appStyle).
+			Bold(true).
+			Border(lipgloss.DoubleBorder()).
+			Render
+	textStyle = lipgloss.NewStyle().
+			Inherit(appStyle).
+			Render
+	currentChannelStyle = lipgloss.NewStyle().
+				Inherit(appStyle).
+				Bold(true).
+				Render
+	cursorStyle = lipgloss.NewStyle().
+			Inherit(appStyle).
+			Bold(true).
+			Foreground(lipgloss.Color("#00FF00")).
+			Render
+)
+
 type model struct {
 	choices       []channel
 	cursor        int
@@ -73,6 +95,8 @@ type model struct {
 	quitting      bool
 	config        *somaConfig
 	currentlTitle string
+	width         int
+	height        int
 }
 
 type currentTitleUpdateMsg struct {
@@ -133,6 +157,9 @@ func (m *model) PlaySelectedChannel() {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
+		return m, nil
 	case currentTitleUpdateMsg:
 		m.currentlTitle = msg.title
 	case tea.KeyMsg:
@@ -199,27 +226,34 @@ func (m model) View() string {
 	if m.quitting {
 		return ""
 	}
-	var s string
-	if m.currentlTitle != "" {
-		s = fmt.Sprintf("Now playing: « %s »\n\n", m.currentlTitle)
+	var s []string
+	if m.currentlTitle != "" && m.playing != -1 {
+		s = append(s, nowPlayingStyle(fmt.Sprintf("Now playing: « %s »", m.currentlTitle)))
 	} else {
-		s = "Pick a SomaFM Channel:\n\n"
+		s = append(s, nowPlayingStyle("Pick a SomaFM Channel"))
 	}
 
 	for i, choice := range m.choices {
 		cursor := " "
+		choiceTitle := fmt.Sprintf("%s", choice.Title)
 		if m.cursor == i {
 			cursor = ">"
+			choiceTitle = fmt.Sprintf("%s | %s | %s", choice.Title, choice.Genre, choice.Description)
 		}
 
 		checked := " "
 		if m.playing == i {
-			checked = "🔊"
+			checked = "♫"
+			s = append(s, lipgloss.JoinHorizontal(0, cursorStyle(cursor), currentChannelStyle(fmt.Sprintf(" %s %s", checked, choiceTitle))))
+		} else {
+			s = append(s, lipgloss.JoinHorizontal(0, cursorStyle(cursor), textStyle(fmt.Sprintf(" %s %s", checked, choiceTitle))))
 		}
 
-		s += fmt.Sprintf("%s %s %s\n", cursor, checked, choice.Title)
 	}
-	return s
+	return appStyle.Copy().
+		Width(m.width).
+		Height(m.height).
+		Render(lipgloss.JoinVertical(0, s...))
 }
 
 /* MPV */

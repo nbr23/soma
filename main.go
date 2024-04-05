@@ -123,6 +123,12 @@ func (m model) Init() tea.Cmd {
 	return nil
 }
 
+func (m *model) PlaySelectedChannel() {
+	m.playing = m.cursor
+	m.mpvConfig.mpv.Loadfile(m.choices[m.cursor].HighestURL, mpv.LoadFileModeReplace)
+	m.config.CurrentlyPlaying = m.choices[m.cursor].HighestURL
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case currentTitleUpdateMsg:
@@ -154,11 +160,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 			}
 
+		case "left", "h":
+			if m.cursor > 0 {
+				m.cursor--
+			} else {
+				m.cursor = len(m.choices) - 1
+			}
+			m.PlaySelectedChannel()
+
+		case "right", "l":
+			if m.cursor < len(m.choices)-1 {
+				m.cursor++
+			} else {
+				m.cursor = 0
+			}
+			m.PlaySelectedChannel()
+
 		case "enter", " ":
 			if m.playing != m.cursor {
-				m.playing = m.cursor
-				m.mpvConfig.mpv.Loadfile(m.choices[m.cursor].HighestURL, mpv.LoadFileModeReplace)
-				m.config.CurrentlyPlaying = m.choices[m.cursor].HighestURL
+				m.PlaySelectedChannel()
 				m.config.IsPaused = false
 				if paused, _ := m.mpvConfig.mpv.Pause(); paused {
 					m.mpvConfig.mpv.SetPause(false)

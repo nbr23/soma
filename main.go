@@ -88,7 +88,6 @@ var (
 )
 
 type model struct {
-	choices       []channel
 	cursor        int
 	playing       int
 	mpvConfig     *mpvConfig
@@ -103,9 +102,8 @@ type currentTitleUpdateMsg struct {
 	title string
 }
 
-func initialModel(c []channel, m *mpvConfig) model {
+func initialModel(m *mpvConfig) model {
 	model := model{
-		choices:   c,
 		playing:   -1,
 		mpvConfig: m,
 		quitting:  false,
@@ -114,12 +112,21 @@ func initialModel(c []channel, m *mpvConfig) model {
 	config, _ := loadConfig()
 	model.config = config
 
+	if len(model.config.Channels.Channels) == 0 {
+		c, err := getSomaChannels()
+		if err != nil {
+			fmt.Println("Unable to fetch Somafm stations", err)
+			os.Exit(1)
+		}
+		model.config.Channels = *c
+	}
+
 	mpvCurrentlyPlayingPath, err := m.mpv.Path()
 	if err != nil {
 		panic(err)
 	}
 	if mpvCurrentlyPlayingPath != "" {
-		for i, c := range c {
+		for i, c := range model.config.Channels.Channels {
 			if c.HighestURL == mpvCurrentlyPlayingPath {
 				model.cursor = i
 				model.playing = i
@@ -129,8 +136,8 @@ func initialModel(c []channel, m *mpvConfig) model {
 		}
 	} else {
 		if model.config.CurrentlyPlaying != "" {
-			for i, c := range c {
-				if c.HighestURL == model.config.CurrentlyPlaying {
+			for i, c := range model.config.Channels.Channels {
+				if c.Id == model.config.CurrentlyPlaying {
 					model.cursor = i
 					if !model.config.IsPaused {
 						model.playing = i
@@ -151,8 +158,8 @@ func (m model) Init() tea.Cmd {
 
 func (m *model) PlaySelectedChannel() {
 	m.playing = m.cursor
-	m.mpvConfig.mpv.Loadfile(m.choices[m.cursor].HighestURL, mpv.LoadFileModeReplace)
-	m.config.CurrentlyPlaying = m.choices[m.cursor].HighestURL
+	m.mpvConfig.mpv.Loadfile(m.config.Channels.Channels[m.cursor].HighestURL, mpv.LoadFileModeReplace)
+	m.config.CurrentlyPlaying = m.config.Channels.Channels[m.cursor].Id
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -179,11 +186,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor > 0 {
 				m.cursor--
 			} else {
-				m.cursor = len(m.choices) - 1
+				m.cursor = len(m.config.Channels.Channels) - 1
 			}
 
 		case "down", "j":
-			if m.cursor < len(m.choices)-1 {
+			if m.cursor < len(m.config.Channels.Channels)-1 {
 				m.cursor++
 			} else {
 				m.cursor = 0
@@ -193,12 +200,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor > 0 {
 				m.cursor--
 			} else {
-				m.cursor = len(m.choices) - 1
+				m.cursor = len(m.config.Channels.Channels) - 1
 			}
 			m.PlaySelectedChannel()
 
 		case "right", "l":
-			if m.cursor < len(m.choices)-1 {
+			if m.cursor < len(m.config.Channels.Channels)-1 {
 				m.cursor++
 			} else {
 				m.cursor = 0
@@ -233,7 +240,7 @@ func (m model) View() string {
 		s = append(s, nowPlayingStyle("Pick a SomaFM Channel"))
 	}
 
-	for i, choice := range m.choices {
+	for i, choice := range m.config.Channels.Channels {
 		cursor := " "
 		choiceTitle := fmt.Sprintf("%s", choice.Title)
 		if m.cursor == i {
@@ -329,8 +336,9 @@ func (m *model) RegisterMpvEventHandler(p *tea.Program) {
 /* CONFIG */
 
 type somaConfig struct {
-	CurrentlyPlaying string `json:"currentlyPlaying"`
-	IsPaused         bool   `json:"isPaused"`
+	CurrentlyPlaying string   `json:"currentlyPlaying"`
+	IsPaused         bool     `json:"isPaused"`
+	Channels         channels `json:"channels"`
 }
 
 func (c *somaConfig) saveConfig() error {
@@ -396,24 +404,18 @@ func main() {
 	startMpv := flags.Bool("start-mpv", true, "Start mpv if not running")
 	flags.Parse(os.Args[1:])
 
-	s, err := getSomaChannels()
-	if err != nil {
-		fmt.Println("Unable to fetch Somafm stations", err)
-		os.Exit(1)
-	}
-
 	mpvClient := mpvConfig{
 		socketPath: *socketPath,
 		startMpv:   *startMpv,
 	}
 
-	err = mpvClient.startMpvClient()
+	err := mpvClient.startMpvClient()
 	if err != nil {
 		fmt.Println("Unable to connect to mpv", err)
 		os.Exit(1)
 	}
 
-	model := initialModel(s.Channels, &mpvClient)
+	model := initialModel(&mpvClient)
 
 	p := tea.NewProgram(model)
 

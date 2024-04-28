@@ -33,12 +33,18 @@ type channel struct {
 	Id                 string   `xml:"id,attr" json:"id"`
 	ChannelDescription string   `xml:"description" json:"description"`
 	Genre              string   `xml:"genre" json:"genre"`
+	IsPlaying          *bool
 }
 
 func (c channel) FilterValue() string {
 	return fmt.Sprintf("%s %s", c.Id, c.ChannelDescription)
 }
-func (c channel) Title() string       { return c.ChannelTitle }
+func (c channel) Title() string {
+	if *c.IsPlaying {
+		return fmt.Sprintf("♫ %s", c.ChannelTitle)
+	}
+	return c.ChannelTitle
+}
 func (c channel) Description() string { return fmt.Sprintf("%s | %s", c.Genre, c.ChannelDescription) }
 
 type channels struct {
@@ -104,6 +110,7 @@ func newItemDelegate() list.DefaultDelegate {
 	d := list.NewDefaultDelegate()
 	d.Styles.SelectedTitle = cursorStyle
 	d.Styles.SelectedDesc = cursorStyle
+	d.SetSpacing(0)
 
 	return d
 }
@@ -111,9 +118,20 @@ func newItemDelegate() list.DefaultDelegate {
 func channelsToItems(c []channel) []list.Item {
 	items := make([]list.Item, len(c))
 	for i, ch := range c {
+		ch.IsPlaying = new(bool)
 		items[i] = ch
 	}
 	return items
+}
+
+func setIsPlaying(l list.Model, id string, isPlaying bool) {
+	for _, c := range l.Items() {
+		if c.(channel).Id == id {
+			*c.(channel).IsPlaying = isPlaying
+		} else {
+			*c.(channel).IsPlaying = false
+		}
+	}
 }
 
 func initialModel(m *mpvConfig) model {
@@ -148,8 +166,12 @@ func initialModel(m *mpvConfig) model {
 				model.playing = c.Id
 				model.mpvConfig.mpv.SetPause(model.config.IsPaused)
 				model.list.Select(i)
+				setIsPlaying(model.list, c.Id, true)
 				break
 			}
+		}
+		if model.playing == "" {
+			model.mpvConfig.mpv.SetPause(true)
 		}
 	} else {
 		if model.config.CurrentlyPlaying != "" {
@@ -159,6 +181,7 @@ func initialModel(m *mpvConfig) model {
 					if !model.config.IsPaused {
 						model.playing = c.Id
 						model.mpvConfig.mpv.Loadfile(c.HighestURL, mpv.LoadFileModeReplace)
+						setIsPlaying(model.list, c.Id, true)
 					}
 					break
 				}
@@ -202,11 +225,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter", " ":
 			if m.playing != m.list.SelectedItem().(channel).Id {
 				m.PlaySelectedChannel()
+				setIsPlaying(m.list, m.list.SelectedItem().(channel).Id, true)
 				m.config.IsPaused = false
+				m.playing = m.list.SelectedItem().(channel).Id
 				if paused, _ := m.mpvConfig.mpv.Pause(); paused {
 					m.mpvConfig.mpv.SetPause(false)
 				}
 			} else {
+				setIsPlaying(m.list, m.playing, true)
 				m.mpvConfig.mpv.SetPause(true)
 				m.config.IsPaused = true
 				m.playing = ""

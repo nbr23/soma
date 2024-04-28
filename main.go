@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -25,14 +26,20 @@ import (
 /* XML PARSING */
 
 type channel struct {
-	Title       string   `xml:"title" json:"title"`
-	HighestURL  string   `xml:"highestpls" json:"highestpls"`
-	FastURL     []string `xml:"fastpls" json:"fastpls"`
-	SlowURL     string   `xml:"slowpls" json:"slowpls"`
-	Id          string   `xml:"id,attr" json:"id"`
-	Description string   `xml:"description" json:"description"`
-	Genre       string   `xml:"genre" json:"genre"`
+	ChannelTitle       string   `xml:"title" json:"title"`
+	HighestURL         string   `xml:"highestpls" json:"highestpls"`
+	FastURL            []string `xml:"fastpls" json:"fastpls"`
+	SlowURL            string   `xml:"slowpls" json:"slowpls"`
+	Id                 string   `xml:"id,attr" json:"id"`
+	ChannelDescription string   `xml:"description" json:"description"`
+	Genre              string   `xml:"genre" json:"genre"`
 }
+
+func (c channel) FilterValue() string {
+	return fmt.Sprintf("%s %s", c.Id, c.ChannelDescription)
+}
+func (c channel) Title() string       { return c.ChannelTitle }
+func (c channel) Description() string { return fmt.Sprintf("%s | %s", c.Genre, c.ChannelDescription) }
 
 type channels struct {
 	Channels []channel `xml:"channel" json:"channels"`
@@ -67,44 +74,51 @@ func getSomaChannels() (*channels, error) {
 /* TUI */
 
 var (
-	appStyle        = lipgloss.NewStyle()
-	nowPlayingStyle = lipgloss.NewStyle().
-			Inherit(appStyle).
-			Bold(true).
-			Border(lipgloss.DoubleBorder()).
-			Render
-	textStyle = lipgloss.NewStyle().
-			Inherit(appStyle).
-			Render
-	currentChannelStyle = lipgloss.NewStyle().
-				Inherit(appStyle).
-				Bold(true).
+	docStyle           = lipgloss.NewStyle().Margin(1, 1)
+	statusMessageStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#00FF00")).
 				Render
+	titleStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFFDF5")).
+			Bold(true)
+
 	cursorStyle = lipgloss.NewStyle().
-			Inherit(appStyle).
 			Bold(true).
-			Foreground(lipgloss.Color("#00FF00")).
-			Render
+			Padding(0, 0, 0, 1).
+			Foreground(lipgloss.Color("#00FF00"))
 )
 
 type model struct {
-	cursor        int
-	playing       int
-	mpvConfig     *mpvConfig
-	quitting      bool
-	config        *somaConfig
-	currentlTitle string
-	width         int
-	height        int
+	playing   string
+	mpvConfig *mpvConfig
+	quitting  bool
+	config    *somaConfig
+	list      list.Model
 }
 
 type currentTitleUpdateMsg struct {
 	title string
 }
 
+func newItemDelegate() list.DefaultDelegate {
+	d := list.NewDefaultDelegate()
+	d.Styles.SelectedTitle = cursorStyle
+	d.Styles.SelectedDesc = cursorStyle
+
+	return d
+}
+
+func channelsToItems(c []channel) []list.Item {
+	items := make([]list.Item, len(c))
+	for i, ch := range c {
+		items[i] = ch
+	}
+	return items
+}
+
 func initialModel(m *mpvConfig) model {
 	model := model{
-		playing:   -1,
+		playing:   "",
 		mpvConfig: m,
 		quitting:  false,
 	}
@@ -121,6 +135,9 @@ func initialModel(m *mpvConfig) model {
 		model.config.Channels = *c
 	}
 
+	model.list = list.New(channelsToItems(model.config.Channels.Channels), newItemDelegate(), 0, 0)
+	model.list.Title = "SomaFM"
+
 	mpvCurrentlyPlayingPath, err := m.mpv.Path()
 	if err != nil {
 		panic(err)
@@ -128,9 +145,9 @@ func initialModel(m *mpvConfig) model {
 	if mpvCurrentlyPlayingPath != "" {
 		for i, c := range model.config.Channels.Channels {
 			if c.HighestURL == mpvCurrentlyPlayingPath {
-				model.cursor = i
-				model.playing = i
+				model.playing = c.Id
 				model.mpvConfig.mpv.SetPause(model.config.IsPaused)
+				model.list.Select(i)
 				break
 			}
 		}
@@ -138,9 +155,9 @@ func initialModel(m *mpvConfig) model {
 		if model.config.CurrentlyPlaying != "" {
 			for i, c := range model.config.Channels.Channels {
 				if c.Id == model.config.CurrentlyPlaying {
-					model.cursor = i
+					model.list.Select(i)
 					if !model.config.IsPaused {
-						model.playing = i
+						model.playing = c.Id
 						model.mpvConfig.mpv.Loadfile(c.HighestURL, mpv.LoadFileModeReplace)
 					}
 					break
@@ -157,18 +174,18 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m *model) PlaySelectedChannel() {
-	m.playing = m.cursor
-	m.mpvConfig.mpv.Loadfile(m.config.Channels.Channels[m.cursor].HighestURL, mpv.LoadFileModeReplace)
-	m.config.CurrentlyPlaying = m.config.Channels.Channels[m.cursor].Id
+	m.playing = m.list.SelectedItem().(channel).Id
+	m.mpvConfig.mpv.Loadfile(m.list.SelectedItem().(channel).HighestURL, mpv.LoadFileModeReplace)
+	m.config.CurrentlyPlaying = m.list.SelectedItem().(channel).Id
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
-		return m, nil
+		top, right, bottom, left := docStyle.GetMargin()
+		m.list.SetSize(msg.Width-left-right, msg.Height-top-bottom)
 	case currentTitleUpdateMsg:
-		m.currentlTitle = msg.title
+		m.list.NewStatusMessage(statusMessageStyle(fmt.Sprintf("♫ Now playing: « %s | %s »", m.list.SelectedItem().(channel).ChannelTitle, msg.title)))
 	case tea.KeyMsg:
 		switch msg.String() {
 
@@ -182,38 +199,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			} else {
-				m.cursor = len(m.config.Channels.Channels) - 1
-			}
-
-		case "down", "j":
-			if m.cursor < len(m.config.Channels.Channels)-1 {
-				m.cursor++
-			} else {
-				m.cursor = 0
-			}
-
-		case "left", "h":
-			if m.cursor > 0 {
-				m.cursor--
-			} else {
-				m.cursor = len(m.config.Channels.Channels) - 1
-			}
-			m.PlaySelectedChannel()
-
-		case "right", "l":
-			if m.cursor < len(m.config.Channels.Channels)-1 {
-				m.cursor++
-			} else {
-				m.cursor = 0
-			}
-			m.PlaySelectedChannel()
-
 		case "enter", " ":
-			if m.playing != m.cursor {
+			if m.playing != m.list.SelectedItem().(channel).Id {
 				m.PlaySelectedChannel()
 				m.config.IsPaused = false
 				if paused, _ := m.mpvConfig.mpv.Pause(); paused {
@@ -222,45 +209,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.mpvConfig.mpv.SetPause(true)
 				m.config.IsPaused = true
-				m.playing = -1
+				m.playing = ""
+				m.list.NewStatusMessage("")
 			}
 		}
 	}
-	return m, nil
+	var cmd tea.Cmd
+	m.list, cmd = m.list.Update(msg)
+	return m, cmd
 }
 
 func (m model) View() string {
 	if m.quitting {
 		return ""
 	}
-	var s []string
-	if m.currentlTitle != "" && m.playing != -1 {
-		s = append(s, nowPlayingStyle(fmt.Sprintf("Now playing: « %s »", m.currentlTitle)))
-	} else {
-		s = append(s, nowPlayingStyle("Pick a SomaFM Channel"))
-	}
-
-	for i, choice := range m.config.Channels.Channels {
-		cursor := " "
-		choiceTitle := fmt.Sprintf("%s", choice.Title)
-		if m.cursor == i {
-			cursor = ">"
-			choiceTitle = fmt.Sprintf("%s | %s | %s", choice.Title, choice.Genre, choice.Description)
-		}
-
-		checked := " "
-		if m.playing == i {
-			checked = "♫"
-			s = append(s, lipgloss.JoinHorizontal(0, cursorStyle(cursor), currentChannelStyle(fmt.Sprintf(" %s %s", checked, choiceTitle))))
-		} else {
-			s = append(s, lipgloss.JoinHorizontal(0, cursorStyle(cursor), textStyle(fmt.Sprintf(" %s %s", checked, choiceTitle))))
-		}
-
-	}
-	return appStyle.Copy().
-		Width(m.width).
-		Height(m.height).
-		Render(lipgloss.JoinVertical(0, s...))
+	return docStyle.Render(m.list.View())
 }
 
 /* MPV */
@@ -310,10 +273,10 @@ func (m *mpvConfig) startMpvClient() error {
 				time.Sleep(1 * time.Second)
 			}
 			if err != nil {
-				return fmt.Errorf("error connecting to mpv: %s\n", err)
+				return fmt.Errorf("error connecting to mpv: %s", err)
 			}
 		} else {
-			return fmt.Errorf("error connecting to mpv: %s\n", err)
+			return fmt.Errorf("error connecting to mpv: %s", err)
 		}
 	}
 	m.ipccClient = ipcc
@@ -416,6 +379,9 @@ func main() {
 	}
 
 	model := initialModel(&mpvClient)
+	model.list.SetShowPagination(false)
+	model.list.SetShowStatusBar(false)
+	model.list.Styles.Title = titleStyle
 
 	p := tea.NewProgram(model)
 

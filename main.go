@@ -41,7 +41,7 @@ func (c channel) FilterValue() string {
 }
 func (c channel) Title() string {
 	if *c.IsPlaying {
-		return fmt.Sprintf("♫ %s", c.ChannelTitle)
+		return playingStyle.Render(fmt.Sprintf("♫ %s", c.ChannelTitle))
 	}
 	return c.ChannelTitle
 }
@@ -92,6 +92,10 @@ var (
 			Bold(true).
 			Padding(0, 0, 0, 1).
 			Foreground(lipgloss.Color("#00FF00"))
+
+	playingStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#00AA00"))
 )
 
 type model struct {
@@ -166,7 +170,7 @@ func initialModel(m *mpvConfig) model {
 				model.playing = c.Id
 				model.mpvConfig.mpv.SetPause(model.config.IsPaused)
 				model.list.Select(i)
-				setIsPlaying(model.list, c.Id, true)
+				setIsPlaying(model.list, c.Id, model.config.IsPaused)
 				break
 			}
 		}
@@ -232,7 +236,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.mpvConfig.mpv.SetPause(false)
 				}
 			} else {
-				setIsPlaying(m.list, m.playing, true)
+				setIsPlaying(m.list, m.playing, false)
 				m.mpvConfig.mpv.SetPause(true)
 				m.config.IsPaused = true
 				m.playing = ""

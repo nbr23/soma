@@ -41,7 +41,7 @@ func (c channel) FilterValue() string {
 }
 func (c channel) Title() string {
 	if *c.IsPlaying {
-		return playingStyle.Render(fmt.Sprintf("♫ %s", c.ChannelTitle))
+		return fmt.Sprintf("♫ %s", c.ChannelTitle)
 	}
 	return c.ChannelTitle
 }

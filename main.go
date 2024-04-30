@@ -88,6 +88,12 @@ var (
 			Foreground(lipgloss.Color("#FFFDF5")).
 			Bold(true)
 
+	paginationActiveStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#00AA00")).
+				Bold(true)
+	paginationInactiveStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#909090"))
+
 	cursorStyle = lipgloss.NewStyle().
 			Bold(true).
 			Padding(0, 0, 0, 1).
@@ -411,9 +417,12 @@ func main() {
 	}
 
 	model := initialModel(&mpvClient)
-	model.list.SetShowPagination(false)
+	model.list.SetShowPagination(true)
 	model.list.SetShowStatusBar(false)
 	model.list.Styles.Title = titleStyle
+
+	model.list.Paginator.ActiveDot = paginationActiveStyle.Render("•")
+	model.list.Paginator.InactiveDot = paginationInactiveStyle.Render("•")
 
 	p := tea.NewProgram(model)
 

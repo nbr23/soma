@@ -233,7 +233,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 
-		case "enter", " ":
+		case "enter":
 			if m.playing != m.list.SelectedItem().(channel).Id {
 				m.PlaySelectedChannel()
 				setIsPlaying(m.list, m.list.SelectedItem().(channel).Id, true)

@@ -148,7 +148,8 @@ func initialModel(m *mpvConfig) model {
 	config, _ := loadConfig()
 	model.config = config
 
-	if len(model.config.Channels.Channels) == 0 {
+	if len(model.config.Channels.Channels) == 0 || time.Since(model.config.LastChannelsListUpdate) > 24*time.Hour*7 {
+		model.config.LastChannelsListUpdate = time.Now()
 		c, err := getSomaChannels()
 		if err != nil {
 			fmt.Println("Unable to fetch Somafm stations", err)
@@ -329,9 +330,10 @@ func (m *model) RegisterMpvEventHandler(p *tea.Program) {
 /* CONFIG */
 
 type somaConfig struct {
-	CurrentlyPlaying string   `json:"currentlyPlaying"`
-	IsPaused         bool     `json:"isPaused"`
-	Channels         channels `json:"channels"`
+	CurrentlyPlaying       string    `json:"currentlyPlaying"`
+	IsPaused               bool      `json:"isPaused"`
+	Channels               channels  `json:"channels"`
+	LastChannelsListUpdate time.Time `json:"lastChannelsListUpdate"`
 }
 
 func (c *somaConfig) saveConfig() error {

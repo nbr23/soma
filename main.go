@@ -116,6 +116,10 @@ type currentTitleUpdateMsg struct {
 	title string
 }
 
+type changePausedStatusMsg struct {
+	paused bool
+}
+
 func newItemDelegate() list.DefaultDelegate {
 	d := list.NewDefaultDelegate()
 	d.Styles.SelectedTitle = cursorStyle
@@ -220,6 +224,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list.SetSize(msg.Width-left-right, msg.Height-top-bottom)
 	case currentTitleUpdateMsg:
 		m.list.NewStatusMessage(statusMessageStyle(fmt.Sprintf("♫ Now playing: « %s | %s »", m.list.SelectedItem().(channel).ChannelTitle, msg.title)))
+	case changePausedStatusMsg:
+		if msg.paused {
+			setIsPlaying(m.list, m.playing, false)
+			m.config.IsPaused = true
+			m.playing = ""
+			m.list.NewStatusMessage("")
+		} else {
+			m.config.IsPaused = false
+			m.playing = m.config.CurrentlyPlaying
+			setIsPlaying(m.list, m.playing, true)
+			title, _ := m.mpvConfig.mpv.GetProperty("media-title")
+			m.list.NewStatusMessage(statusMessageStyle(fmt.Sprintf("♫ Now playing: « %s | %s »", m.config.CurrentlyPlaying, title)))
+
+		}
 	case tea.KeyMsg:
 		switch msg.String() {
 
@@ -323,12 +341,18 @@ func (m *mpvConfig) startMpvClient() error {
 
 func (m *model) RegisterMpvEventHandler(p *tea.Program) {
 	m.mpvConfig.mpv.ObserveProperty("media-title")
+	m.mpvConfig.mpv.ObserveProperty("core-idle")
 	m.mpvConfig.mpv.RegisterHandler(func(r *mpv.Response) {
 		if r.Event == "property-change" && r.Name == "media-title" {
 			if r.Data == nil {
 				return
 			}
 			p.Send(currentTitleUpdateMsg{title: r.Data.(string)})
+		} else if r.Event == "property-change" && r.Name == "core-idle" {
+			if r.Data == nil {
+				return
+			}
+			p.Send(changePausedStatusMsg{paused: r.Data.(bool)})
 		}
 	})
 }

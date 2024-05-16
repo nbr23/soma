@@ -98,10 +98,6 @@ var (
 			Bold(true).
 			Padding(0, 0, 0, 1).
 			Foreground(lipgloss.Color("#00FF00"))
-
-	playingStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#00AA00"))
 )
 
 type model struct {

@@ -239,12 +239,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "ctrl+c", "q":
 			m.config.saveConfig()
+			m.quitting = true
 			if m.mpvConfig.signals != nil {
-				m.mpvConfig.signals <- os.Kill
+				m.mpvConfig.signals <- somaStopSignal{}
 			} else {
 				m.mpvConfig.mpv.SetPause(true)
 			}
-			m.quitting = true
 			return m, tea.Quit
 
 		case "enter":
@@ -287,6 +287,11 @@ type mpvConfig struct {
 	ipccClient *mpv.IPCClient
 }
 
+type somaStopSignal struct{}
+
+func (s somaStopSignal) Signal()        {}
+func (s somaStopSignal) String() string { return "somaStopSignal" }
+
 func runMpv(c *mpvConfig) error {
 	cmd := exec.Command("mpv", "--idle", fmt.Sprintf("--input-ipc-server=%s", c.socketPath))
 
@@ -297,13 +302,19 @@ func runMpv(c *mpvConfig) error {
 	c.signals = make(chan os.Signal, 1)
 	signal.Notify(c.signals, syscall.SIGINT, syscall.SIGTERM)
 
+	var sig os.Signal
+
 	go func() {
-		<-c.signals
+		sig = <-c.signals
 		if err := cmd.Process.Kill(); err != nil {
 			fmt.Printf("Error killing process: %s\n", err)
 		}
-		if err := cmd.Wait(); err != nil {
-			fmt.Printf("Error waiting for command: %s\n", err)
+	}()
+
+	go func() {
+		err := cmd.Wait()
+		if sig == nil || sig.String() != "somaStopSignal" {
+			fmt.Printf("mpv exited: %s\n", err)
 		}
 		os.Exit(1)
 	}()

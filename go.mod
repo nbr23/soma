@@ -5,7 +5,7 @@ go 1.22.1
 require (
 	github.com/charmbracelet/bubbles v0.18.0
 	github.com/charmbracelet/bubbletea v0.26.3
-	github.com/charmbracelet/lipgloss v0.10.0
+	github.com/charmbracelet/lipgloss v0.11.0
 	github.com/nbr23/go-mpv v0.0.0-20240404024243-a9ba32eda984
 	golang.org/x/net v0.23.0
 )

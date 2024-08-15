@@ -248,6 +248,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "enter":
+			if m.list.FilterState() == list.Filtering {
+				return m, nil
+			}
 			if m.playing != m.list.SelectedItem().(channel).Id {
 				m.PlaySelectedChannel()
 				setIsPlaying(m.list, m.list.SelectedItem().(channel).Id, true)

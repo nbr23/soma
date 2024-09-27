@@ -3,7 +3,7 @@ module github.com/nbr23/soma
 go 1.22.1
 
 require (
-	github.com/charmbracelet/bubbles v0.19.0
+	github.com/charmbracelet/bubbles v0.20.0
 	github.com/charmbracelet/bubbletea v1.1.1
 	github.com/charmbracelet/lipgloss v0.13.1
 	github.com/nbr23/go-mpv v0.0.0-20240404024243-a9ba32eda984
